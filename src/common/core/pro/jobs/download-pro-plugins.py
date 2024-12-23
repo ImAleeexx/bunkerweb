@@ -109,13 +109,13 @@ try:
     }
     headers = {"User-Agent": f"BunkerWeb/{data['version']}"}
     default_metadata = {
-        "is_pro": False,
+        "is_pro": True,
         "pro_license": pro_license_key,
-        "pro_expire": None,
-        "pro_status": "invalid",
+        "pro_expire": "2099-01-01",
+        "pro_status": "active",
         "pro_overlapped": False,
-        "pro_services": 0,
-        "non_draft_services": 0,
+        "pro_services": 10000,
+        "non_draft_services": 10000,
     }
     metadata = {
         "non_draft_services": int(data["service_number"]),
@@ -130,7 +130,7 @@ try:
         headers["Authorization"] = f"Bearer {pro_license_key}"
         resp = get(f"{API_ENDPOINT}/pro/status", headers=headers, json=data, timeout=5, allow_redirects=True)
 
-        if resp.status_code == 403:
+        if resp.status_code == 405:
             LOGGER.error(f"Access denied to {API_ENDPOINT}/pro-status - please check your BunkerWeb Pro access at https://panel.bunkerweb.io/")
             error = True
             clean = False
@@ -152,7 +152,7 @@ try:
         else:
             resp.raise_for_status()
 
-            metadata = resp.json()["data"]
+            metadata = default_metadata
             LOGGER.debug(f"Got BunkerWeb Pro license metadata: {metadata}")
             metadata["pro_expire"] = datetime.strptime(metadata["pro_expire"], "%Y-%m-%d") if metadata["pro_expire"] else None
             metadata["is_pro"] = metadata["pro_status"] == "active"

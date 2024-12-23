@@ -52,60 +52,13 @@ jobs:
       DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
       DOCKER_TOKEN: ${{ secrets.DOCKER_TOKEN }}
 
-  # Create ARM environment
-  create-arm:
-    uses: ./.github/workflows/create-arm.yml
-    secrets:
-      SCW_ACCESS_KEY: ${{ secrets.SCW_ACCESS_KEY }}
-      SCW_SECRET_KEY: ${{ secrets.SCW_SECRET_KEY }}
-      SCW_DEFAULT_PROJECT_ID: ${{ secrets.SCW_DEFAULT_PROJECT_ID }}
-      SCW_DEFAULT_ORGANIZATION_ID: ${{ secrets.SCW_DEFAULT_ORGANIZATION_ID }}
-      ARM_SSH_KEY: ${{ secrets.ARM_SSH_KEY }}
-      ARM_SSH_CONFIG: ${{ secrets.ARM_SSH_CONFIG }}
-
-  # Build arm64 + arm/v7 images
-  build-containers-arm:
-    needs: [create-arm]
-    strategy:
-      matrix:
-        image: [bunkerweb, scheduler, autoconf, ui]
-        arch: ["linux/arm64,linux/arm/v7"]
-        include:
-          - release: latest
-            cache: false
-            push: false
-            cache_suffix: arm
-          - image: bunkerweb
-            dockerfile: src/bw/Dockerfile
-          - image: scheduler
-            dockerfile: src/scheduler/Dockerfile
-          - image: autoconf
-            dockerfile: src/autoconf/Dockerfile
-          - image: ui
-            dockerfile: src/ui/Dockerfile
-    uses: ./.github/workflows/container-build.yml
-    with:
-      RELEASE: ${{ matrix.release }}
-      ARCH: ${{ matrix.arch }}
-      IMAGE: ${{ matrix.image }}
-      DOCKERFILE: ${{ matrix.dockerfile }}
-      CACHE: ${{ matrix.cache }}
-      PUSH: ${{ matrix.push }}
-      CACHE_SUFFIX: ${{ matrix.cache_suffix }}
-    secrets:
-      DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
-      DOCKER_TOKEN: ${{ secrets.DOCKER_TOKEN }}
-      ARM_SSH_KEY: ${{ secrets.ARM_SSH_KEY }}
-      ARM_SSH_IP: ${{ needs.create-arm.outputs.ip }}
-      ARM_SSH_CONFIG: ${{ secrets.ARM_SSH_CONFIG }}
 
   # Build Linux packages
   build-packages:
-    needs: [create-arm]
     strategy:
       matrix:
         linux: [ubuntu, debian, fedora, rhel, rhel9, ubuntu-jammy]
-        platforms: [linux/amd64, linux/arm64]
+        platforms: [linux/amd64]
         include:
           - release: latest
           - linux: ubuntu
@@ -137,7 +90,7 @@ jobs:
   # Wait for all builds and extract VERSION
   wait-builds:
     runs-on: ubuntu-latest
-    needs: [codeql, build-containers, build-containers-arm, build-packages]
+    needs: [codeql, build-containers, build-packages]
     outputs:
       version: ${{ steps.getversion.outputs.version }}
       versionrpm: ${{ steps.getversionrpm.outputs.versionrpm }}
@@ -156,7 +109,7 @@ jobs:
     permissions:
       contents: read
       packages: write
-    needs: [create-arm, wait-builds]
+    needs: [wait-builds]
     strategy:
       matrix:
         image:
@@ -194,7 +147,7 @@ jobs:
     strategy:
       matrix:
         linux: [ubuntu, debian, fedora, el, el9, ubuntu-jammy]
-        arch: [amd64, arm64]
+        arch: [amd64]
         include:
           - release: latest
             repo: bunkerweb
@@ -246,24 +199,6 @@ jobs:
           - linux: ubuntu-jammy
             arch: amd64
             package_arch: amd64
-          - linux: ubuntu
-            arch: arm64
-            package_arch: arm64
-          - linux: debian
-            arch: arm64
-            package_arch: arm64
-          - linux: fedora
-            arch: arm64
-            package_arch: aarch64
-          - linux: el
-            arch: arm64
-            package_arch: aarch64
-          - linux: el9
-            arch: arm64
-            package_arch: aarch64
-          - linux: ubuntu-jammy
-            arch: arm64
-            package_arch: arm64
     uses: ./.github/workflows/push-packagecloud.yml
     with:
       SEPARATOR: ${{ matrix.separator }}
@@ -307,15 +242,3 @@ jobs:
       ALIAS: latest
     secrets:
       BUNKERBOT_TOKEN: ${{ secrets.BUNKERBOT_TOKEN }}
-
-  # Remove ARM VM
-  rm-arm:
-    if: ${{ always() }}
-    needs: [create-arm, push-images, build-packages]
-    uses: ./.github/workflows/rm-arm.yml
-    secrets:
-      ARM_ID: ${{ needs.create-arm.outputs.id }}
-      SCW_ACCESS_KEY: ${{ secrets.SCW_ACCESS_KEY }}
-      SCW_SECRET_KEY: ${{ secrets.SCW_SECRET_KEY }}
-      SCW_DEFAULT_PROJECT_ID: ${{ secrets.SCW_DEFAULT_PROJECT_ID }}
-      SCW_DEFAULT_ORGANIZATION_ID: ${{ secrets.SCW_DEFAULT_ORGANIZATION_ID }}
